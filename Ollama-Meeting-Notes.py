@@ -1,8 +1,9 @@
-import os
-import ollama
+#import os
+#import ollama
 from ollama import Client
-#from docx import Document
 import json
+import webvtt
+import argparse
 
 SYSTEM_PROMPT_ACTION_ITEMS = """
 Identify and summarize any action items from the meeting transcription.
@@ -61,78 +62,70 @@ SYSTEM_PROMPT_MOM = """
 Generate detailed minutes of the meeting suitable for sharing with the client. Include key discussion points, decisions made, action items assigned to participants, and any notable follow-up tasks. Provide a comprehensive summary that captures the essence of the meeting and is clear and concise for client communication.
 """
 
-MODEL_NAME = "llama3.1"
-HOST = "http://localhost:22434"
 
-client = Client(host=HOST)
-response = client.chat(model=MODEL_NAME, messages=[
-  {
-    'role': 'user',
-    'content': 'Why is the sky blue?',
-  },
-])
+def get_contents(transcription, SYSTEM_PROMPTS, host="http://localhost:11434", model_name="llama3.1"):
+    #print(host)
+    #print(model_name)
+    print(SYSTEM_PROMPTS)
+    client = Client(host=host)
+    response = client.chat(model=model_name, messages=[
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPTS
+        },
+        {
+            "role": "user",
+            "content": transcription
+        }
+    ])
+    return response["message"]["content"]
 
+def vtt_to_text(vtt_file):
+    outlines = []
+    # Initialize the parser
+    vtt = webvtt.read(vtt_file)
+    for caption in vtt:
+        ##print(caption.start)
+        ##print(caption.end)
+        #print(caption.text)
+        outlines.append(caption.text)
+    return "\n".join(outlines)
 
-def read_file(file_path):
-    try:
-        with open(file_path, 'r') as file:
-            file_content = file.read()
-        return file_content
-    except FileNotFoundError:
-        print(f"The file '{file_path}' does not exist.")
-        return None
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+def json_to_output(minutes):
+    # Initialize an empty list to store the sections and their content
+    sections = []
 
+    # Iterate over each section in the minutes data
+    for section, content in minutes.items():
+        # Convert the content to Markdown text by wrapping it in headings and bold text
+        markdown_content = f"**{section}**:\n\n{content}"
 
-def get_contents(transcription, SYSTEM_PROMPTS):
-    response = client.chat.completions.create(
-        model=model_name,
-        temperature=0,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPTS
-            },
-            {
-                "role": "user",
-                "content": transcription
-            }
-        ]
-    )
+        # Add the section and its content to the list of sections
+        sections.append(markdown_content)
 
-    return response.choices[0].message.content
+    # Join all the sections together with a newline character in between
+    result = "\n\n".join(sections)
 
+    return result
 
-#def save_as_docx(minutes, filename):
-#    doc = Document()
-#    for key, value in minutes.items():
-#        # Replace underscores with spaces and capitalize each word for the heading
-#        heading = ' '.join(word.capitalize() for word in key.split('_'))
-#        doc.add_heading(heading, level=1)
-#        doc.add_paragraph(value)
-#        # Add a line break between sections
-#        doc.add_paragraph()
-#    doc.save(filename)
+def meeting_minutes(transcription, host="http://localhost:11434", model_name="llam3.1"):
+    LLM = "Model: {}\nServer: {}".format(model_name, host)
+    ACTION_ITEMS = get_contents(transcription, SYSTEM_PROMPT_ACTION_ITEMS, host, model_name)
+    SUMMARY_NOTES = get_contents(transcription, SYSTEM_PROMPT_SUMMARY_NOTES, host, model_name)
+    IDENTITY_PARTICIPANTS = get_contents(transcription, SYSTEM_PROMPT_IDENTITY_PARTICIPANTS, host, model_name)
+    DECISIONS = get_contents(transcription, SYSTEM_PROMPT_DECISIONS, host, model_name)
 
+    IMPORTANT_NOTE = get_contents(transcription, SYSTEM_PROMPT_IMPORTANT_NOTE, host, model_name)
+    FOLLOW_UPS = get_contents(transcription, SYSTEM_PROMPT_FOLLOW_UPS, host, model_name)
+    EXTRACT_QUESTIONS = get_contents(transcription, SYSTEM_PROMPT_EXTRACT_QUESTIONS, host, model_name)
 
-def meeting_minutes(transcription):
-    ACTION_ITEMS = get_contents(transcription, SYSTEM_PROMPT_ACTION_ITEMS)
-    SUMMARY_NOTES = get_contents(transcription, SYSTEM_PROMPT_SUMMARY_NOTES)
-    IDENTITY_PARTICIPANTS = get_contents(transcription, SYSTEM_PROMPT_IDENTITY_PARTICIPANTS)
-    DECISIONS = get_contents(transcription, SYSTEM_PROMPT_DECISIONS)
-
-    IMPORTANT_NOTE = get_contents(transcription, SYSTEM_PROMPT_IMPORTANT_NOTE)
-    FOLLOW_UPS = get_contents(transcription, SYSTEM_PROMPT_FOLLOW_UPS)
-    EXTRACT_QUESTIONS = get_contents(transcription, SYSTEM_PROMPT_EXTRACT_QUESTIONS)
-
-    CAPTURE_AGENDA = get_contents(transcription, SYSTEM_PROMPT_CAPTURE_AGENDA)
-    HIGHLIGHT_CONCERNS = get_contents(transcription, SYSTEM_PROMPT_HIGHLIGHT_CONCERNS)
-    MEETING_SUMMARY = get_contents(transcription, SYSTEM_PROMPT_MEETING_SUMMARY)
-    MOM = get_contents(transcription, SYSTEM_PROMPT_MOM)
+    CAPTURE_AGENDA = get_contents(transcription, SYSTEM_PROMPT_CAPTURE_AGENDA, host, model_name)
+    HIGHLIGHT_CONCERNS = get_contents(transcription, SYSTEM_PROMPT_HIGHLIGHT_CONCERNS, host, model_name)
+    MEETING_SUMMARY = get_contents(transcription, SYSTEM_PROMPT_MEETING_SUMMARY, host, model_name)
+    MOM = get_contents(transcription, SYSTEM_PROMPT_MOM, host, model_name)
 
     return {
+        'LLM Meeting notes' : LLM,
         'Action Items': ACTION_ITEMS,
         'Summary Notes': SUMMARY_NOTES,
         'Participants': IDENTITY_PARTICIPANTS,
@@ -149,12 +142,43 @@ def meeting_minutes(transcription):
     }
 
 
-file_path = "transcription.txt"
-content = read_file(file_path)
+def create_parser():
+    # Initialize the parser
+    parser = argparse.ArgumentParser(description='Convert VTT file to text')
 
-file_name = file_path.split("/")[-1].split(".")[0].replace(" ", "")
+    # Add arguments
+    parser.add_argument('--vtt-file', type=str, required=True, help='Path to the input VTT file')
+    parser.add_argument('--output-file', type=str, default='output.txt', help='Path to the output text file')
+    parser.add_argument('--hostname', type=str, default="http://localhost:11434", help=f'Hostname (default: http://localhost:11434)')
+    parser.add_argument('--model-name', type=str, default="llama3.1", help=f'Model name (default: llama3.1)')
 
-minutes = meeting_minutes(content)
+    # Parse arguments
+    return parser.parse_args()
+
+if __name__ == '__main__':
+    # Parse arguments
+    args = create_parser()
+
+    # Convert webvtt file to simple text
+    transcript = vtt_to_text(args.vtt_file)
+    print(f'VTT file converted to text.')
+
+#    client = Client(host=args.hostname)
+#    response = client.chat(model=args.model_name, messages=[
+#        {
+#            "role": "system",
+#            "content": "Identify and summarize any action items from the meeting transcription. List the tasks or action items discussed in the meeting. Extract actionable items or to-do tasks from the meeting. "
+#        },
+#        {
+#            "role": "user",
+#            "content": "Something about"
+#        }
+#    ])
+#    print(response["message"]["content"])
+
+    minutes = meeting_minutes(transcript, host=args.hostname, model_name=args.model_name)
+    print(minutes)
+    print(json_to_output(minutes))
 
 #save_as_docx(minutes, f'{base_file_op_path}{file_name}_detailed_meeting_minutes.docx')
 
