@@ -6,10 +6,12 @@ Eta-ML is a set of scripts to make using ML (AI, LLM, GenAI, etc.) easier. Initi
 
 ## How to install and get working:
 ### OSX
-We will be using Brew for much of the installation and configuration. You can find the Brew installation information here:
+We will be using Brew for much of the installation and configuration. You can find the Brew installation information [here](https://brew.sh/).
 
-brew install python
-brew install ollama
+    brew install python
 
-pipx install ollama-py
-pipx install webvtt
+    brew install ollama
+
+    pipx install ollama-py
+
+    pipx install webvtt
