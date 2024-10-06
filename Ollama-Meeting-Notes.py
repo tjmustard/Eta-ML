@@ -108,6 +108,12 @@ def json_to_output(minutes):
 
     return result
 
+def save_to_file(minutes_text, filename):
+    # Open the file in write mode
+    with open(filename, 'w') as file:
+        # Write the Markdown text to the file
+        file.write(minutes_text)
+
 def meeting_minutes(transcription, host="http://localhost:11434", model_name="llam3.1"):
     LLM = "Model: {}\nServer: {}".format(model_name, host)
     ACTION_ITEMS = get_contents(transcription, SYSTEM_PROMPT_ACTION_ITEMS, host, model_name)
@@ -178,7 +184,8 @@ if __name__ == '__main__':
 
     minutes = meeting_minutes(transcript, host=args.hostname, model_name=args.model_name)
     print(minutes)
-    print(json_to_output(minutes))
+    minutes_text = json_to_output(minutes)
+    save_to_file(minutes_text, args.output_file)
 
 #save_as_docx(minutes, f'{base_file_op_path}{file_name}_detailed_meeting_minutes.docx')
 
