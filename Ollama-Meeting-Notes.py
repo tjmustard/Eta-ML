@@ -62,13 +62,38 @@ SYSTEM_PROMPT_MOM = """
 Generate detailed minutes of the meeting suitable for sharing with the client. Include key discussion points, decisions made, action items assigned to participants, and any notable follow-up tasks. Provide a comprehensive summary that captures the essence of the meeting and is clear and concise for client communication.
 """
 
+SYSTEM_PROMPT_ALL = """
+Given a meeting transcription, extract and summarize the following information:
+
+* Key points discussed in the meeting
+* Main topics covered in the meeting
+* Decisions made during the meeting
+* Action items or to-do tasks assigned to participants
+* Follow-up tasks or items mentioned at the end of the meeting
+* Questions raised during the meeting and their context
+* Concerns or issues raised by participants
+* Timestamps and associated content from the meeting transcription
+
+Additionally, generate a concise summary of the entire meeting based on the transcription, including:
+
+* A brief overview of the meeting
+* Key takeaways and highlights
+* A comprehensive summary suitable for sharing with clients, including:
+ + Key discussion points
+ + Decisions made
+ + Action items assigned to participants
+ + Notable follow-up tasks
+
+This summary should be clear, concise, and capture the essence of the meeting.
+"""
+
 
 def get_contents(transcription, SYSTEM_PROMPTS, host="http://localhost:11434", model_name="llama3.1"):
     #print(host)
     #print(model_name)
     print(SYSTEM_PROMPTS)
     client = Client(host=host)
-    response = client.chat(model=model_name, messages=[
+    response = client.chat(model=model_name, options={"num_ctx": round(content_length * 1.5)}, messages=[
         {
             "role": "system",
             "content": SYSTEM_PROMPTS
@@ -130,6 +155,8 @@ def meeting_minutes(transcription, host="http://localhost:11434", model_name="ll
     MEETING_SUMMARY = get_contents(transcription, SYSTEM_PROMPT_MEETING_SUMMARY, host, model_name)
     MOM = get_contents(transcription, SYSTEM_PROMPT_MOM, host, model_name)
 
+    SUMALL = get_contents(transcription, SYSTEM_PROMPT_ALL, host, model_name)
+
     return {
         'LLM Meeting notes' : LLM,
         'Action Items': ACTION_ITEMS,
@@ -144,7 +171,9 @@ def meeting_minutes(transcription, host="http://localhost:11434", model_name="ll
         'Agenda': CAPTURE_AGENDA,
         'Concerns': HIGHLIGHT_CONCERNS,
         'Meeting Summary': MEETING_SUMMARY,
-        'MOM': MOM
+        'MOM': MOM,
+
+        'SUMALL': SUMALL
     }
 
 
@@ -167,20 +196,24 @@ if __name__ == '__main__':
 
     # Convert webvtt file to simple text
     transcript = vtt_to_text(args.vtt_file)
-    print(f'VTT file converted to text.')
-
-#    client = Client(host=args.hostname)
-#    response = client.chat(model=args.model_name, messages=[
-#        {
-#            "role": "system",
-#            "content": "Identify and summarize any action items from the meeting transcription. List the tasks or action items discussed in the meeting. Extract actionable items or to-do tasks from the meeting. "
-#        },
-#        {
-#            "role": "user",
-#            "content": "Something about"
-#        }
-#    ])
-#    print(response["message"]["content"])
+    print('VTT file converted to text. Length: {}'.format(len(transcript)))
+    #4096 8192 16384 32768 65536 131072
+    content_length = 0
+    for line in transcript:
+        content_length += len(line)/4
+    print("The context size will be: {}".format(round(content_length * 1.5)))
+    #client = Client(host=args.hostname)
+    #response = client.chat(model=args.model_name, options={"num_ctx": round(content_length * 1.5)}, messages=[
+    #    {
+    #        "role": "system",
+    #        "content": SYSTEM_PROMPT_ALL
+    #    },
+    #    {
+    #        "role": "user",
+    #        "content": transcript
+    #    }
+    #])
+    #print(response["message"]["content"])
 
     minutes = meeting_minutes(transcript, host=args.hostname, model_name=args.model_name)
     print(minutes)
